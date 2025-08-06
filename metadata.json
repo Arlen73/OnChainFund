@@ -1,0 +1,6 @@
+{
+  "name": "FundFactory",
+  "description": "A comprehensive platform for creating, managing, and investing in on-chain funds. FundFactory provides tools for both fund managers and investors, enabling customizable fund structures, transparent portfolio management, and seamless trading.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}

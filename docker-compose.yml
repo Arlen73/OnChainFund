@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # 只剩下前端服務
+  onvhainfund:
+    # 給容器一個好記的名字
+    container_name: onvhainfund
+    build:
+      # 指定 Dockerfile 所在的目錄
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_SYSTEM_Name=${VITE_SYSTEM_Name}
+        - VITE_SYSTEM_Description=${VITE_SYSTEM_Description}
+        - VITE_SYSTEM_Version=${VITE_SYSTEM_Version}
+        - VITE_FUND_FACTORY_ADDRESS=${VITE_FUND_FACTORY_ADDRESS}
+        - VITE_USDC_ADDRESS=${VITE_USDC_ADDRESS}
+        - VITE_WETH_ADDRESS=${VITE_WETH_ADDRESS}
+        - VITE_ASVT_ADDRESS=${VITE_ASVT_ADDRESS}
+    ports:
+      # 將你電腦的 8080 port 映射到容器的 80 port
+      # 你可以透過 http://localhost:8080 訪問
+      - "8080:80"
+    # 設定容器在退出時總是重新啟動，除非手動停止
+    restart: unless-stopped
