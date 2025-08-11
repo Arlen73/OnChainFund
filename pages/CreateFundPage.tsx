@@ -1,26 +1,30 @@
-
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ethers } from 'ethers';
+import { type WalletClient, createWalletClient, custom } from 'viem';
+import { mainnet } from 'viem/chains';
+import { parseUnits, parseAbi, Address } from 'viem';
+import { LifeCycle, Configuration, Policies } from "@enzymefinance/sdk";
+import { getContracts, getAssets, Network } from "@enzymefinance/environment";
+
 import Switch from '../components/Switch';
 import { useWallet } from '../contexts/WalletContext';
 import WalletConnectionPrompt from '../components/WalletConnectionPrompt';
 
-// --- Contract Details (for demonstration) ---
-// In a real-world app, this would come from a config file or environment variables.
-const FUND_FACTORY_ADDRESS = import.meta.env.VITE_FUND_FACTORY_ADDRESS; // Example address
-const DENOMINATION_ASSET_ADDRESSES: { [key: string]: string } = {
-    'USDC': import.meta.env.VITE_USDC_ADDRESS,
-    'WETH': import.meta.env.VITE_WETH_ADDRESS,
-    'ASVT': import.meta.env.VITE_ASVT_ADDRESS,
+// Helper to convert ethers.js Signer to a Viem WalletClient
+const getWalletClient = (signer: any): WalletClient => {
+    const provider = signer.provider;
+    const account = signer.address;
+
+    if (!provider || !account) {
+        throw new Error("Signer must have a provider and an address.");
+    }
+
+    return createWalletClient({
+        account,
+        chain: mainnet, // Assuming mainnet, adjust if your app is multi-chain
+        transport: custom(provider.provider), // Use the underlying EIP-1193 provider
+    });
 };
-const FUND_FACTORY_ABI = [
-    { "inputs": [], "name": "deployedFunds", "outputs": [{ "internalType": "address[]", "name": "", "type": "address[]" }], "stateMutability": "view", "type": "function" },
-    { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "fundAddress", "type": "address" }, { "indexed": true, "internalType": "address", "name": "manager", "type": "address" }, { "internalType": "string", "name": "fundName", "type": "string" }, { "indexed": false, "internalType": "address", "name": "denominationAsset", "type": "address" }], "name": "FundCreated", "type": "event" },
-    { "inputs": [{ "internalType": "string", "name": "_name", "type": "string" }, { "internalType": "string", "name": "_symbol", "type": "string" }, { "internalType": "address", "name": "_denominationAsset", "type": "address" }], "name": "createFund", "outputs": [{ "internalType": "address", "name": "newFundAddress", "type": "address" }], "stateMutability": "nonpayable", "type": "function" },
-    { "inputs": [], "name": "getDeployedFunds", "outputs": [{ "internalType": "address[]", "name": "", "type": "address[]" }], "stateMutability": "view", "type": "function" }
-];
-// ----------------------------------------------
 
 
 const stepsConfig = [
@@ -90,7 +94,7 @@ const CreateFundPage: React.FC = () => {
     });
     const [policies, setPolicies] = useState({
         depositorWhitelist: { enabled: false, list: '' },
-        depositLimits: { enabled: false, min: 0, max: 10000 },
+        depositLimits: { enabled: false, min: 1000, max: 100000 },
         shareTransferWhitelist: { enabled: false, list: '' },
     });
 
@@ -128,23 +132,113 @@ const CreateFundPage: React.FC = () => {
         setIsSubmitting(true);
 
         try {
-            const factoryContract = new ethers.Contract(FUND_FACTORY_ADDRESS, FUND_FACTORY_ABI, signer);
-            const assetAddress = DENOMINATION_ASSET_ADDRESSES[denominationAsset];
+            const walletClient = getWalletClient(signer);
+            const network = Network.ETHEREUM; // Assuming Ethereum Mainnet
+            const contracts = getContracts(network);
+            const assets = getAssets(network);
 
-            if (!assetAddress) {
-                throw new Error(`不支援的計價資產: ${denominationAsset}`);
+            // 1. Denomination Asset
+            const selectedDenominationAsset = (assets as any)[denominationAsset.toLowerCase()];
+            if (!selectedDenominationAsset) {
+                throw new Error(`Unsupported denomination asset: ${denominationAsset}`);
             }
 
-            const tx = await factoryContract.createFund(fundName, fundSymbol, assetAddress);
-            setTxHash(tx.hash);
+            // 2. Fee Configuration
+            const feeSettings = [];
+            if (fees.management.enabled) {
+                feeSettings.push({
+                    address: contracts.ManagementFee,
+                    settings: Configuration.Fees.Management.encodeSettings({
+                        rate: parseUnits(String(fees.management.rate / 100), 18),
+                        scaledRate: parseUnits(String(fees.management.rate / 100), 18),
+                    }),
+                });
+            }
+            if (fees.performance.enabled) {
+                feeSettings.push({
+                    address: contracts.PerformanceFee,
+                    settings: Configuration.Fees.Performance.encodeSettings({
+                        rate: parseUnits(String(fees.performance.rate / 100), 18),
+                        scaledRate: parseUnits(String(fees.performance.rate / 100), 18),
+                        highWaterMark: parseUnits("1.0", 18),
+                    }),
+                });
+            }
+            if (fees.entrance.enabled) {
+                feeSettings.push({
+                    address: contracts.EntranceFee,
+                    settings: Configuration.Fees.Entrance.encodeSettings({
+                        rate: parseUnits(String(fees.entrance.rate / 100), 18),
+                        scaledRate: parseUnits(String(fees.entrance.rate / 100), 18),
+                    }),
+                });
+            }
+            if (fees.exit.enabled) {
+                feeSettings.push({
+                    address: contracts.ExitFee,
+                    settings: Configuration.Fees.Exit.encodeSettings({
+                        rate: parseUnits(String(fees.exit.rate / 100), 18),
+                        scaledRate: parseUnits(String(fees.exit.rate / 100), 18),
+                    }),
+                });
+            }
+            const feeManagerConfig = Configuration.Fees.encodeSettings({ fees: feeSettings });
 
-            await tx.wait(); // Wait for transaction to be mined
 
-            alert('基金創建成功！');
+            // 3. Policy Configuration
+            const policySettings = [];
+            if (policies.depositLimits.enabled) {
+                policySettings.push({
+                    address: contracts.MinMaxInvestmentPolicy,
+                    settings: Policies.MinMaxInvestment.encodeSettings({
+                        minInvestmentAmount: parseUnits(String(policies.depositLimits.min), selectedDenominationAsset.decimals),
+                        maxInvestmentAmount: parseUnits(String(policies.depositLimits.max), selectedDenominationAsset.decimals),
+                    }),
+                });
+            }
+            if (policies.depositorWhitelist.enabled) {
+                const addresses = policies.depositorWhitelist.list.split('\n').filter(addr => addr.startsWith('0x')).map(addr => addr.trim() as Address);
+                policySettings.push({
+                    address: contracts.AllowedDepositRecipientsPolicy,
+                    settings: Policies.AllowedDepositRecipients.encodeSettings({
+                        existingListIds: [],
+                        newListsArgs: [{ updateType: 0n, initialItems: addresses }],
+                    }),
+                });
+            }
+             if (policies.shareTransferWhitelist.enabled) {
+                const addresses = policies.shareTransferWhitelist.list.split('\n').filter(addr => addr.startsWith('0x')).map(addr => addr.trim() as Address);
+                policySettings.push({
+                    address: contracts.AllowedSharesTransferRecipientsPolicy,
+                    settings: Policies.AllowedSharesTransferRecipients.encodeSettings({
+                        existingListIds: [],
+                        newListsArgs: [{ updateType: 0n, initialItems: addresses }],
+                    }),
+                });
+            }
+            const policyManagerConfig = Configuration.Policies.encodeSettings(policySettings);
+
+            // 4. Create Vault Transaction
+            const { request } = LifeCycle.createVault({
+                fundDeployer: contracts.FundDeployer,
+                owner: signer.address,
+                name: fundName,
+                symbol: fundSymbol,
+                denominationAsset: selectedDenominationAsset.address,
+                sharesActionTimelockInSeconds: 0n, // No timelock for simplicity
+                feeManagerConfigData: feeManagerConfig,
+                policyManagerConfigData: policyManagerConfig,
+            });
+
+            // 5. Send Transaction
+            const hash = await walletClient.sendTransaction(request);
+            setTxHash(hash);
+
+            alert('基金創建成功！交易已送出，正在等待區塊鏈確認。');
             navigate('/dashboard/manager');
 
         } catch (err: any) {
-            const errorMessage = err.reason || err.message || '發生未知錯誤';
+            const errorMessage = err.shortMessage || err.message || '發生未知錯誤';
             setError(errorMessage);
             console.error('基金創建失敗:', err);
             alert(`基金創建失敗: ${errorMessage}`);
@@ -196,7 +290,6 @@ const CreateFundPage: React.FC = () => {
                                         <select id="denominationAsset" value={denominationAsset} onChange={e => setDenominationAsset(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition">
                                             <option value="USDC">USDC - USD Coin</option>
                                             <option value="WETH">WETH - Wrapped Ether</option>
-                                            <option value="ASVT">ASVT - ASVT Token</option>
                                         </select>
                                         <p className="text-xs text-gray-500 mt-1">用於衡量基金淨值和績效的基礎資產。 <span className="font-semibold text-amber-600">此為半永久性設定。</span></p>
                                     </div>
@@ -227,12 +320,15 @@ const CreateFundPage: React.FC = () => {
                                     <h2 className="text-3xl font-bold text-gray-900 mb-2">申購策略</h2>
                                     <p className="text-gray-500 mb-8">設定誰可以投資您的基金，以及投資的額度限制。</p>
                                     <FeeSetting title="投資人白名單" description="開啟後，只有白名單內的錢包地址才能申購基金份額。" isEnabled={policies.depositorWhitelist.enabled} onToggle={v => setPolicies(p => ({ ...p, depositorWhitelist: { ...p.depositorWhitelist, enabled: v } }))}>
-                                        <div><label htmlFor="depositorWhitelist" className="block text-sm font-medium text-gray-700">錢包地址列表</label><textarea id="depositorWhitelist" rows={3} placeholder="每行一個地址，例如：0x..." className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea></div>
+                                        <div>
+                                            <label htmlFor="depositorWhitelist" className="block text-sm font-medium text-gray-700">錢包地址列表</label>
+                                            <textarea id="depositorWhitelist" value={policies.depositorWhitelist.list} onChange={e => setPolicies(p => ({ ...p, depositorWhitelist: { ...p.depositorWhitelist, list: e.target.value } }))} rows={3} placeholder="每行一個地址，例如：0x..." className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea>
+                                        </div>
                                     </FeeSetting>
                                     <FeeSetting title="申購限額" description="設定單次申購的最低和最高金額限制。" isEnabled={policies.depositLimits.enabled} onToggle={v => setPolicies(p => ({ ...p, depositLimits: { ...p.depositLimits, enabled: v } }))}>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div><label htmlFor="minDeposit" className="block text-sm font-medium text-gray-700">最低申購金額</label><input type="number" id="minDeposit" placeholder="0" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
-                                            <div><label htmlFor="maxDeposit" className="block text-sm font-medium text-gray-700">最高申購金額</label><input type="number" id="maxDeposit" placeholder="10000" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
+                                            <div><label htmlFor="minDeposit" className="block text-sm font-medium text-gray-700">最低申購金額</label><input type="number" id="minDeposit" value={policies.depositLimits.min} onChange={e => setPolicies(p => ({ ...p, depositLimits: { ...p.depositLimits, min: +e.target.value } }))} placeholder="0" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
+                                            <div><label htmlFor="maxDeposit" className="block text-sm font-medium text-gray-700">最高申購金額</label><input type="number" id="maxDeposit" value={policies.depositLimits.max} onChange={e => setPolicies(p => ({ ...p, depositLimits: { ...p.depositLimits, max: +e.target.value } }))} placeholder="10000" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
                                         </div>
                                     </FeeSetting>
                                 </div>
@@ -242,40 +338,23 @@ const CreateFundPage: React.FC = () => {
                                 <div className="space-y-6">
                                     <h2 className="text-3xl font-bold text-gray-900 mb-2">份額轉讓性</h2>
                                     <p className="text-gray-500 mb-8">控制您基金的份額是否可以在二級市場自由流動。</p>
-                                    <FeeSetting title="限制份額轉讓" description="開啟後，只有白名單內的地址才能接收基金份額的轉讓。" isEnabled={policies.shareTransferWhitelist.enabled} onToggle={v => setPolicies(p => ({ ...p, shareTransferWhitelist: { ...p.shareTransferWhitelist, enabled: v } }))}>
-                                        <div><label htmlFor="shareTransferWhitelist" className="block text-sm font-medium text-gray-700">接收方白名單地址</label><textarea id="shareTransferWhitelist" rows={3} placeholder="每行一個地址" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea></div>
+                                     <FeeSetting title="限制份額轉讓" description="開啟後，只有白名單內的地址才能接收基金份額的轉讓。" isEnabled={policies.shareTransferWhitelist.enabled} onToggle={v => setPolicies(p => ({ ...p, shareTransferWhitelist: { ...p.shareTransferWhitelist, enabled: v } }))}>
+                                        <div>
+                                            <label htmlFor="shareTransferWhitelist" className="block text-sm font-medium text-gray-700">接收方白名單地址</label>
+                                            <textarea id="shareTransferWhitelist" value={policies.shareTransferWhitelist.list} onChange={e => setPolicies(p => ({ ...p, shareTransferWhitelist: { ...p.shareTransferWhitelist, list: e.target.value } }))} rows={3} placeholder="每行一個地址" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea>
+                                        </div>
                                     </FeeSetting>
                                 </div>
                             )}
 
-                            {currentStep === 5 && (
+                            {/* Steps 5, 6, 7 are not implemented yet */}
+                            {currentStep >= 5 && (
                                 <div className="space-y-6">
-                                    <h2 className="text-3xl font-bold text-gray-900 mb-2">贖回策略</h2>
-                                    <p className="text-gray-500 mb-8">設定投資人如何以及何時可以贖回他們的資產。</p>
-                                    <div className="p-4 border rounded-lg bg-gray-50">
-                                        <h3 className="text-lg font-semibold">份額鎖倉期</h3>
-                                        <p className="text-sm text-gray-600 mt-1">設定投資人申購後，其份額需要鎖定一段時間後才能贖回。 <span className="font-semibold text-amber-600">此為半永久性設定。</span></p>
-                                        <div className="mt-4"><label htmlFor="lockupPeriod" className="block text-sm font-medium text-gray-700">鎖倉時間 (小時)</label><input type="number" id="lockupPeriod" defaultValue="0" placeholder="例如：72" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
-                                    </div>
+                                     <h2 className="text-3xl font-bold text-gray-900 mb-2">功能開發中</h2>
+                                     <p className="text-gray-500 mb-8">此功能仍在開發中，敬請期待。</p>
                                 </div>
                             )}
 
-                            {currentStep === 6 && (
-                                <div className="space-y-6">
-                                    <h2 className="text-3xl font-bold text-gray-900 mb-2">資產管理策略</h2>
-                                    <p className="text-gray-500 mb-8">定義基金經理可以投資哪些資產以及與哪些 DeFi 協議互動。</p>
-                                    <div className="p-4 border rounded-lg bg-gray-50">
-                                        <h3 className="text-lg font-semibold">資產白名單</h3>
-                                        <p className="text-sm text-gray-600 mt-1">基金經理只能購買和持有在此白名單中的資產。</p>
-                                        <div className="mt-4"><label htmlFor="assetWhitelist" className="block text-sm font-medium text-gray-700">資產地址列表</label><textarea id="assetWhitelist" rows={3} placeholder="每行一個資產合約地址" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea></div>
-                                    </div>
-                                    <div className="p-4 border rounded-lg bg-gray-50">
-                                        <h3 className="text-lg font-semibold">協議白名單</h3>
-                                        <p className="text-sm text-gray-600 mt-1">基金經理只能與在此白名單中的 DeFi 協議進行互動。</p>
-                                        <div className="mt-4"><label htmlFor="protocolWhitelist" className="block text-sm font-medium text-gray-700">協議合約地址列表</label><textarea id="protocolWhitelist" rows={3} placeholder="每行一個協議合約地址" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea></div>
-                                    </div>
-                                </div>
-                            )}
 
                             <div className="mt-12 pt-5 border-t border-gray-200">
                                 <div className="flex justify-between">
