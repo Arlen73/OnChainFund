@@ -12,8 +12,6 @@
   },
   "dependencies": {
     "@enzymefinance/sdk": "^1.2.19",
-    "@enzymefinance/environment": "6.3.60",
-    "viem": "^2.0.0",
     "@tailwindcss/vite": "^4.1.11",
     "chart.js": "^4.5.0",
     "ethers": "^6.15.0",
