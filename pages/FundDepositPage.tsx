@@ -1,8 +1,31 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWallet } from '../contexts/WalletContext';
+import { ethers } from 'ethers';
 
-const FundDetails: React.FC = () => (
+// --- Constants and ABIs ---
+const VAULT_PROXY_ADDRESS = '0xABBf9b6439BB5335C48d80a00d2cDCbA23A942e6';
+const DEPOSIT_TOKEN_ADDRESS = import.meta.env.VITE_ASVT_ADDRESS; // ASVT Token
+
+const VAULT_PROXY_ABI = [
+    'function getAccessor() view returns (address)'
+];
+
+const COMPTROLLER_ABI = [
+    'function calcGav() view returns (uint256)',
+    'function calcGrossShareValue() view returns (uint256)',
+    'function buyShares(uint256 _investmentAmount, uint256 _minSharesQuantity)',
+    'function buySharesWithEth(uint256 _minSharesQuantity) payable',
+    'function getDenominationAsset() view returns (address)'
+];
+
+const ERC20_ABI = [
+    'function balanceOf(address account) view returns (uint256)',
+    'function allowance(address owner, address spender) view returns (uint256)',
+    'function approve(address spender, uint256 amount) returns (bool)'
+];
+
+const FundDetails: React.FC<{ aum: string; nav: string }> = ({ aum, nav }) => (
     <div className="lg:col-span-2 bg-white p-8 rounded-2xl shadow-lg">
         <h2 className="text-2xl font-bold mb-4">基金詳情</h2>
         <div className="mb-8">
@@ -13,8 +36,8 @@ const FundDetails: React.FC = () => (
             </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8 text-center">
-            <div><p className="text-sm text-gray-500">總管理資產 (AUM)</p><p className="text-2xl font-bold">$1,234,567</p></div>
-            <div><p className="text-sm text-gray-500">目前份額淨值 (NAV)</p><p className="text-2xl font-bold">$1.15</p></div>
+            <div><p className="text-sm text-gray-500">總管理資產 (AUM)</p><p className="text-2xl font-bold">${aum}</p></div>
+            <div><p className="text-sm text-gray-500">目前份額淨值 (NAV)</p><p className="text-2xl font-bold">${nav}</p></div>
             <div><p className="text-sm text-gray-500">管理費</p><p className="text-2xl font-bold">2%</p></div>
             <div><p className="text-sm text-gray-500">申購費</p><p className="text-2xl font-bold">1%</p></div>
         </div>
@@ -25,52 +48,169 @@ const FundDetails: React.FC = () => (
     </div>
 );
 
-
 const FundDepositPage: React.FC = () => {
-    const { isConnected } = useWallet();
+    const { isConnected, provider, signer, address } = useWallet();
     const [amount, setAmount] = useState('');
-    const [asset, setAsset] = useState('USDC');
+    
+    // Contract and data states
+    const [comptrollerContract, setComptrollerContract] = useState<ethers.Contract | null>(null);
+    const [depositTokenContract, setDepositTokenContract] = useState<ethers.Contract | null>(null);
+    const [comptrollerProxyAddress, setComptrollerProxyAddress] = useState<string | null>(null);
+    const [fundData, setFundData] = useState({ nav: '0.00', aum: '0.00' });
+    const [userData, setUserData] = useState({ tokenBalance: '0.00', allowance: '0' });
+
+    // UI states
     const [calculations, setCalculations] = useState({ fee: '0.00', shares: '0.00', total: '0.00' });
     const [isApproved, setIsApproved] = useState(false);
     const [isApproving, setIsApproving] = useState(false);
     const [isDepositing, setIsDepositing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-    const NAV = 1.15;
-    const ENTRANCE_FEE_RATE = 0.01;
+    // Function to clear messages and start a new action
+    const startAction = (action: React.Dispatch<React.SetStateAction<boolean>>) => {
+        setError(null);
+        setSuccessMessage(null);
+        action(true);
+    };
+
+    // Auto-clear success message
+    useEffect(() => {
+        if (successMessage) {
+            const timer = setTimeout(() => {
+                setSuccessMessage(null);
+            }, 5000); // Clear after 5 seconds
+            return () => clearTimeout(timer);
+        }
+    }, [successMessage]);
+
+    useEffect(() => {
+        const initContracts = async () => {
+            if (!provider) return;
+            setError(null);
+            try {
+                const vaultProxy = new ethers.Contract(VAULT_PROXY_ADDRESS, VAULT_PROXY_ABI, provider);
+                const comptrollerAddress = await vaultProxy.getAccessor();
+                setComptrollerProxyAddress(comptrollerAddress);
+                const comptroller = new ethers.Contract(comptrollerAddress, COMPTROLLER_ABI, signer || provider);
+                setComptrollerContract(comptroller);
+                const depositToken = new ethers.Contract(DEPOSIT_TOKEN_ADDRESS, ERC20_ABI, signer || provider);
+                setDepositTokenContract(depositToken);
+            } catch (e) {
+                console.error("Error initializing contracts: ", e);
+                setError("無法載入基金合約。請確認您連接到正確的網路。");
+            }
+        };
+
+        if (isConnected && provider) {
+            initContracts();
+        } else {
+            setComptrollerContract(null);
+            setDepositTokenContract(null);
+            setComptrollerProxyAddress(null);
+            setError(null);
+        }
+    }, [isConnected, provider, signer]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            if (!comptrollerContract || !depositTokenContract || !address || !comptrollerProxyAddress) return;
+            try {
+                const [navResult, gavResult, balanceResult, allowanceResult] = await Promise.all([
+                    comptrollerContract.calcGrossShareValue(),
+                    comptrollerContract.calcGav(),
+                    depositTokenContract.balanceOf(address),
+                    depositTokenContract.allowance(address, comptrollerProxyAddress),
+                ]);
+
+                const nav = parseFloat(ethers.formatUnits(navResult, 18)).toFixed(4);
+                const aum = parseFloat(ethers.formatUnits(gavResult, 18)).toFixed(2);
+                const tokenBalance = parseFloat(ethers.formatUnits(balanceResult, 18)).toFixed(4);
+                
+                setFundData({ nav, aum });
+                setUserData({ tokenBalance, allowance: allowanceResult.toString() });
+                
+                const inputAmount = ethers.parseUnits(amount || "0", 18);
+                if (allowanceResult >= inputAmount) {
+                    setIsApproved(true);
+                } else {
+                    setIsApproved(false);
+                }
+
+            } catch (e) {
+                console.error("Error fetching data:", e);
+                setError("讀取鏈上資料時發生錯誤。");
+            }
+        };
+
+        fetchData();
+        // Re-fetch data periodically or on specific events
+        const interval = setInterval(fetchData, 30000); // every 30 seconds
+        return () => clearInterval(interval);
+    }, [comptrollerContract, depositTokenContract, address, comptrollerProxyAddress, amount]);
 
     useEffect(() => {
         const numAmount = parseFloat(amount) || 0;
-        if (numAmount > 0) {
-            const fee = numAmount * ENTRANCE_FEE_RATE;
+        const nav = parseFloat(fundData.nav) || 0;
+        if (numAmount > 0 && nav > 0) {
+            // NOTE: Using hardcoded 1% fee from mockup. A real implementation
+            // would fetch this from the fee manager contract.
+            const fee = numAmount * 0.01;
             const netAmount = numAmount - fee;
-            const shares = netAmount / NAV;
+            const shares = netAmount / nav;
             setCalculations({
-                fee: fee.toFixed(2),
+                fee: fee.toFixed(4),
                 shares: shares.toFixed(4),
                 total: numAmount.toFixed(2),
             });
         } else {
             setCalculations({ fee: '0.00', shares: '0.00', total: '0.00' });
         }
-    }, [amount, NAV]);
+    }, [amount, fundData.nav]);
 
-    const handleApprove = () => {
-        setIsApproving(true);
-        setTimeout(() => {
+
+    const handleApprove = async () => {
+        if (!depositTokenContract || !comptrollerProxyAddress || !amount) {
+            setError("無法執行授權：要件不全。");
+            return;
+        }
+        startAction(setIsApproving);
+        try {
+            const parsedAmount = ethers.parseUnits(amount, 18);
+            const tx = await depositTokenContract.approve(comptrollerProxyAddress, parsedAmount);
+            await tx.wait();
             setIsApproved(true);
+            setSuccessMessage("ASVT 授權成功！");
+        } catch (e) {
+            console.error("Approval failed:", e);
+            setError("授權失敗。請查看錢包或控制台以獲取更多資訊。");
+        } finally {
             setIsApproving(false);
-            alert('資產授權成功！現在可以進行申購。');
-        }, 1500);
+        }
     };
 
-    const handleDeposit = () => {
-        setIsDepositing(true);
-        setTimeout(() => {
-            alert('申購成功！您的份額已發送到您的錢包。');
+    const handleDeposit = async () => {
+        if (!comptrollerContract || !amount) {
+            setError("無法執行申購：要件不全。");
+            return;
+        }
+        startAction(setIsDepositing);
+        
+        try {
+            const parsedAmount = ethers.parseUnits(amount, 18);
+            const minSharesQuantity = 1; // Note: Not safe for production
+            
+            const tx = await comptrollerContract.buyShares(parsedAmount, minSharesQuantity);
+            await tx.wait();
+
+            setSuccessMessage("申購成功！您的份額已到帳。");
             setAmount('');
-            setIsApproved(false);
+        } catch (e) {
+            console.error("ASVT deposit failed:", e);
+            setError("申購失敗。請查看錢包或控制台以獲取更多資訊。");
+        } finally {
             setIsDepositing(false);
-        }, 2000);
+        }
     };
 
     return (
@@ -80,28 +220,34 @@ const FundDepositPage: React.FC = () => {
                 <p className="text-lg text-gray-500">由 <span className="font-semibold text-blue-600">0xManager...Address</span> 管理</p>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <FundDetails />
+                <FundDetails nav={fundData.nav} aum={fundData.aum} />
                 <div className="bg-white p-8 rounded-2xl shadow-lg h-fit">
                     <h2 className="text-2xl font-bold mb-6 text-center">申購基金</h2>
                     <div className="space-y-6">
                         <div>
-                            <label htmlFor="depositAsset" className="block text-sm font-medium text-gray-700 mb-1">選擇投資資產</label>
-                            <select id="depositAsset" value={asset} onChange={e => setAsset(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-300 transition"><option value="USDC">USDC</option><option value="WETH">WETH</option><option value="USDT">USDT</option></select>
-                        </div>
-                        <div>
-                            <div className="flex justify-between items-baseline"><label htmlFor="depositAmount" className="block text-sm font-medium text-gray-700 mb-1">投資金額</label><span className="text-sm text-gray-500">餘額: 10,000.00 {asset}</span></div>
-                            <div className="relative"><input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-300 transition pr-16" /><button onClick={() => setAmount('10000')} className="absolute inset-y-0 right-0 px-4 text-sm font-semibold text-blue-600 hover:text-blue-800">最大值</button></div>
+                            <div className="flex justify-between items-baseline"><label htmlFor="depositAmount" className="block text-sm font-medium text-gray-700 mb-1">投資金額</label><span className="text-sm text-gray-500">餘額: {userData.tokenBalance} ASVT</span></div>
+                            <div className="relative"><input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-300 transition pr-16" /><button onClick={() => setAmount(userData.tokenBalance)} className="absolute inset-y-0 right-0 px-4 text-sm font-semibold text-blue-600 hover:text-blue-800">最大值</button></div>
                         </div>
                         <div className="bg-gray-50 p-4 rounded-lg space-y-2 text-sm">
                             <div className="flex justify-between"><span className="text-gray-600">您將收到約</span><span className="font-semibold">{calculations.shares} SGF01 份額</span></div>
-                            <div className="flex justify-between"><span className="text-gray-600">申購費 (1%)</span><span className="font-semibold">{calculations.fee} {asset}</span></div>
-                            <div className="flex justify-between border-t pt-2 mt-2"><span className="text-gray-800 font-bold">總花費</span><span className="font-bold text-gray-800">{calculations.total} {asset}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-600">申購費 (1%)</span><span className="font-semibold">{calculations.fee} ASVT</span></div>
+                            <div className="flex justify-between border-t pt-2 mt-2"><span className="text-gray-800 font-bold">總花費</span><span className="font-bold text-gray-800">{calculations.total} ASVT</span></div>
                         </div>
                         <div className="space-y-3 pt-2">
+                            <div className="h-6 text-center">
+                                {error && <p className="text-sm text-red-600">{error}</p>}
+                                {successMessage && <p className="text-sm text-green-600">{successMessage}</p>}
+                            </div>
                             {!isConnected ? <div className="text-center text-gray-500 p-4 bg-gray-100 rounded-lg">請先連接錢包以進行操作</div> : 
                             (<>
-                                <button onClick={handleApprove} disabled={isApproved || isApproving || !amount} className={`w-full font-bold py-3 px-6 rounded-lg transition-colors duration-300 ${isApproved ? 'bg-gray-300 text-gray-500 cursor-default' : 'bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-400'}`}>{isApproving ? '授權中...' : (isApproved ? '✓ 已授權' : `1. 授權 ${asset}`)}</button>
-                                <button onClick={handleDeposit} disabled={!isApproved || isDepositing || !amount} className="w-full bg-emerald-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-emerald-600 transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed">{isDepositing ? '交易發送中...' : '2. 確認申購'}</button>
+                                <button onClick={handleApprove} disabled={isApproved || isApproving || !amount} className={`w-full font-bold py-3 px-6 rounded-lg transition-colors duration-300 ${isApproved ? 'bg-gray-300 text-gray-500 cursor-default' : 'bg-blue-500 text-white hover:bg-blue-600 disabled:bg-gray-400'}`}>{isApproving ? '授權中...' : (isApproved ? '✓ 已授權' : `1. 授權 ASVT`)}</button>
+                                <button 
+                                    onClick={handleDeposit} 
+                                    disabled={!isApproved || isDepositing || !amount} 
+                                    className="w-full bg-emerald-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-emerald-600 transition-colors duration-300 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                                >
+                                    {isDepositing ? '交易發送中...' : `2. 確認申購`}
+                                </button>
                             </>)}
                         </div>
                     </div>
