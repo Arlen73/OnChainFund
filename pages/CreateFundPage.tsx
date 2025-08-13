@@ -14,7 +14,9 @@ const DENOMINATION_ASSET_ADDRESSES: { [key: string]: string } = {
     'WETH': import.meta.env.VITE_WETH_ADDRESS,
     'ASVT': import.meta.env.VITE_ASVT_ADDRESS,
 };
-//const FUND_FACTORY_ABI = [{ "inputs": [{ "internalType": "address", "name": "_dispatcher", "type": "address" }, { "internalType": "address", "name": "_gasRelayPaymasterFactory", "type": "address" }], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "address", "name": "caller", "type": "address" }], "name": "BuySharesOnBehalfCallerDeregistered", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "address", "name": "caller", "type": "address" }], "name": "BuySharesOnBehalfCallerRegistered", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "address", "name": "comptrollerLib", "type": "address" }], "name": "ComptrollerLibSet", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "creator", "type": "address" }, { "indexed": false, "internalType": "address", "name": "comptrollerProxy", "type": "address" }, { "indexed": true, "internalType": "address", "name": "denominationAsset", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "sharesActionTimelock", "type": "uint256" }], "name": "ComptrollerProxyDeployed", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "uint256", "name": "nextDeactivateFeeManagerGasLimit", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "nextPayProtocolFeeGasLimit", "type": "uint256" }], "name": "GasLimitsForDestructCallSet", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "creator", "type": "address" }, { "indexed": true, "internalType": "address", "name": "vaultProxy", "type": "address" }, { "indexed": false, "internalType": "address", "name": "comptrollerProxy", "type": "address" }], "name": "MigrationRequestCreated", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "creator", "type": "address" }, { "indexed": false, "internalType": "address", "name": "vaultProxy", "type": "address" }, { "indexed": false, "internalType": "address", "name": "comptrollerProxy", "type": "address" }], "name": "NewFundCreated", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "address", "name": "protocolFeeTracker", "type": "address" }], "name": "ProtocolFeeTrackerSet", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "vaultProxy", "type": "address" }, { "indexed": true, "internalType": "address", "name": "nextComptrollerProxy", "type": "address" }], "name": "ReconfigurationRequestCancelled", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "creator", "type": "address" }, { "indexed": true, "internalType": "address", "name": "vaultProxy", "type": "address" }, { "indexed": false, "internalType": "address", "name": "comptrollerProxy", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "executableTimestamp", "type": "uint256" }], "name": "ReconfigurationRequestCreated", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "vaultProxy", "type": "address" }, { "indexed": true, "internalType": "address", "name": "prevComptrollerProxy", "type": "address" }, { "indexed": true, "internalType": "address", "name": "nextComptrollerProxy", "type": "address" }], "name": "ReconfigurationRequestExecuted", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "uint256", "name": "nextTimelock", "type": "uint256" }], "name": "ReconfigurationTimelockSet", "type": "event" }, { "anonymous": false, "inputs": [], "name": "ReleaseIsLive", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "contractAddress", "type": "address" }, { "indexed": false, "internalType": "bytes4", "name": "selector", "type": "bytes4" }, { "indexed": false, "internalType": "bytes32", "name": "dataHash", "type": "bytes32" }], "name": "VaultCallDeregistered", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "contractAddress", "type": "address" }, { "indexed": false, "internalType": "bytes4", "name": "selector", "type": "bytes4" }, { "indexed": false, "internalType": "bytes32", "name": "dataHash", "type": "bytes32" }], "name": "VaultCallRegistered", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "address", "name": "vaultLib", "type": "address" }], "name": "VaultLibSet", "type": "event" }, { "inputs": [{ "internalType": "address", "name": "_vaultProxy", "type": "address" }, { "internalType": "bool", "name": "_bypassPrevReleaseFailure", "type": "bool" }], "name": "cancelMigration", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_vaultProxy", "type": "address" }], "name": "cancelReconfiguration", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_vaultProxy", "type": "address" }, { "internalType": "address", "name": "_denominationAsset", "type": "address" }, { "internalType": "uint256", "name": "_sharesActionTimelock", "type": "uint256" }, { "internalType": "bytes", "name": "_feeManagerConfigData", "type": "bytes" }, { "internalType": "bytes", "name": "_policyManagerConfigData", "type": "bytes" }, { "internalType": "bool", "name": "_bypassPrevReleaseFailure", "type": "bool" }], "name": "createMigrationRequest", "outputs": [{ "internalType": "address", "name": "comptrollerProxy_", "type": "address" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_fundOwner", "type": "address" }, { "internalType": "string", "name": "_fundName", "type": "string" }, { "internalType": "string", "name": "_fundSymbol", "type": "string" }, { "internalType": "address", "name": "_denominationAsset", "type": "address" }, { "internalType": "uint256", "name": "_sharesActionTimelock", "type": "uint256" }, { "internalType": "bytes", "name": "_feeManagerConfigData", "type": "bytes" }, { "internalType": "bytes", "name": "_policyManagerConfigData", "type": "bytes" }], "name": "createNewFund", "outputs": [{ "internalType": "address", "name": "comptrollerProxy_", "type": "address" }, { "internalType": "address", "name": "vaultProxy_", "type": "address" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_vaultProxy", "type": "address" }, { "internalType": "address", "name": "_denominationAsset", "type": "address" }, { "internalType": "uint256", "name": "_sharesActionTimelock", "type": "uint256" }, { "internalType": "bytes", "name": "_feeManagerConfigData", "type": "bytes" }, { "internalType": "bytes", "name": "_policyManagerConfigData", "type": "bytes" }], "name": "createReconfigurationRequest", "outputs": [{ "internalType": "address", "name": "comptrollerProxy_", "type": "address" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address[]", "name": "_callers", "type": "address[]" }], "name": "deregisterBuySharesOnBehalfCallers", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address[]", "name": "_contracts", "type": "address[]" }, { "internalType": "bytes4[]", "name": "_selectors", "type": "bytes4[]" }, { "internalType": "bytes32[]", "name": "_dataHashes", "type": "bytes32[]" }], "name": "deregisterVaultCalls", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_vaultProxy", "type": "address" }, { "internalType": "bool", "name": "_bypassPrevReleaseFailure", "type": "bool" }], "name": "executeMigration", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_vaultProxy", "type": "address" }], "name": "executeReconfiguration", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "getComptrollerLib", "outputs": [{ "internalType": "address", "name": "comptrollerLib_", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getCreator", "outputs": [{ "internalType": "address", "name": "creator_", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getDispatcher", "outputs": [{ "internalType": "address", "name": "dispatcher_", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getGasLimitsForDestructCall", "outputs": [{ "internalType": "uint256", "name": "deactivateFeeManagerGasLimit_", "type": "uint256" }, { "internalType": "uint256", "name": "payProtocolFeeGasLimit_", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getGasRelayPaymasterFactory", "outputs": [{ "internalType": "address", "name": "gasRelayPaymasterFactory_", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getGasRelayTrustedForwarder", "outputs": [{ "internalType": "address", "name": "trustedForwarder_", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getOwner", "outputs": [{ "internalType": "address", "name": "owner_", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getProtocolFeeTracker", "outputs": [{ "internalType": "address", "name": "protocolFeeTracker_", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_vaultProxy", "type": "address" }], "name": "getReconfigurationRequestForVaultProxy", "outputs": [{ "components": [{ "internalType": "address", "name": "nextComptrollerProxy", "type": "address" }, { "internalType": "uint256", "name": "executableTimestamp", "type": "uint256" }], "internalType": "struct IFundDeployer.ReconfigurationRequest", "name": "reconfigurationRequest_", "type": "tuple" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getReconfigurationTimelock", "outputs": [{ "internalType": "uint256", "name": "reconfigurationTimelock_", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "getVaultLib", "outputs": [{ "internalType": "address", "name": "vaultLib_", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_vaultProxy", "type": "address" }], "name": "hasReconfigurationRequest", "outputs": [{ "internalType": "bool", "name": "hasReconfigurationRequest_", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "_nextComptrollerProxy", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "invokeMigrationInCancelHook", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "enum IMigrationHookHandler.MigrationOutHook", "name": "_hook", "type": "uint8" }, { "internalType": "address", "name": "_vaultProxy", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "invokeMigrationOutHook", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_who", "type": "address" }], "name": "isAllowedBuySharesOnBehalfCaller", "outputs": [{ "internalType": "bool", "name": "isAllowed_", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_contract", "type": "address" }, { "internalType": "bytes4", "name": "_selector", "type": "bytes4" }, { "internalType": "bytes32", "name": "_dataHash", "type": "bytes32" }], "name": "isAllowedVaultCall", "outputs": [{ "internalType": "bool", "name": "isAllowed_", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_contract", "type": "address" }, { "internalType": "bytes4", "name": "_selector", "type": "bytes4" }, { "internalType": "bytes32", "name": "_dataHash", "type": "bytes32" }], "name": "isRegisteredVaultCall", "outputs": [{ "internalType": "bool", "name": "isRegistered_", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address[]", "name": "_callers", "type": "address[]" }], "name": "registerBuySharesOnBehalfCallers", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address[]", "name": "_contracts", "type": "address[]" }, { "internalType": "bytes4[]", "name": "_selectors", "type": "bytes4[]" }, { "internalType": "bytes32[]", "name": "_dataHashes", "type": "bytes32[]" }], "name": "registerVaultCalls", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "releaseIsLive", "outputs": [{ "internalType": "bool", "name": "isLive_", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_comptrollerLib", "type": "address" }], "name": "setComptrollerLib", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "uint32", "name": "_nextDeactivateFeeManagerGasLimit", "type": "uint32" }, { "internalType": "uint32", "name": "_nextPayProtocolFeeGasLimit", "type": "uint32" }], "name": "setGasLimitsForDestructCall", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_protocolFeeTracker", "type": "address" }], "name": "setProtocolFeeTracker", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "uint256", "name": "_nextTimelock", "type": "uint256" }], "name": "setReconfigurationTimelock", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "setReleaseLive", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_vaultLib", "type": "address" }], "name": "setVaultLib", "outputs": [], "stateMutability": "nonpayable", "type": "function" }];
+const ENTRANCE_RATE_DIRECT_FEE_ADDRESS = import.meta.env.VITE_ENTRANCE_RATE_DIRECT_FEE_ADDRESS;
+const ALLOWED_DEPOSIT_RECIPIENTS_POLICY_ADDRESS = import.meta.env.VITE_ALLOWED_DEPOSIT_RECIPIENTS_POLICY_ADDRESS;
+
 const FUND_FACTORY_ABI = [
     'function balanceOf(address account) view returns (uint256)',
     'function createNewFund(address _fundOwner, string _fundName, string _fundSymbol, address _denominationAsset, uint256 _sharesActionTimelock, bytes _feeManagerConfigData, bytes _policyManagerConfigData) returns (address comptrollerProxy_, address vaultProxy_)'
@@ -84,7 +86,7 @@ const CreateFundPage: React.FC = () => {
     const [fees, setFees] = useState({
         management: { enabled: false, rate: 2 },
         performance: { enabled: false, rate: 20 },
-        entrance: { enabled: false, rate: 1 },
+        entrance: { enabled: false, rate: 1, recipient: '' },
         exit: { enabled: false, rate: 1 },
     });
     const [policies, setPolicies] = useState({
@@ -92,6 +94,8 @@ const CreateFundPage: React.FC = () => {
         depositLimits: { enabled: false, min: 0, max: 10000 },
         shareTransferWhitelist: { enabled: false, list: '' },
     });
+    const [sharesActionTimelockInHours, setSharesActionTimelockInHours] = useState(24);
+
 
     // Transaction State
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -143,10 +147,69 @@ const CreateFundPage: React.FC = () => {
 
             const factoryContract = new ethers.Contract(FUND_FACTORY_ADDRESS, FUND_FACTORY_ABI, signer);
             const assetAddress = DENOMINATION_ASSET_ADDRESSES[denominationAsset];
-            const fundOwner = signer.address;
-            const sharesActionTimelock = 60 * 60 * 24; // 股份操作的時間鎖 (範例為 1 天，單位為秒)
-            const feeManagerConfigData = "0x"; // 根據你的要求，先傳入空字節
-            const policyManagerConfigData = "0x"; // 根據你的要求，先傳入空字節
+            const fundOwner = await signer.getAddress();
+            const sharesActionTimelock = sharesActionTimelockInHours * 60 * 60; // Convert hours to seconds
+
+            // --- ABI 編碼 ---
+            const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
+            let feeManagerConfigData = "0x";
+            if (fees.entrance.enabled) {
+                const recipient = fees.entrance.recipient;
+                if (!ethers.isAddress(recipient)) {
+                    alert('無效的收款地址');
+                    setIsSubmitting(false);
+                    return;
+                }
+                // 1% in the contract is 100, so we multiply by 100
+                const rate = fees.entrance.rate * 100;
+                const entranceFeeSettings = defaultAbiCoder.encode(
+                    ['uint256', 'address'],
+                    [rate, recipient]
+                );
+                feeManagerConfigData = defaultAbiCoder.encode(
+                    ['address[]', 'bytes[]'],
+                    [[ENTRANCE_RATE_DIRECT_FEE_ADDRESS], [entranceFeeSettings]]
+                );
+            }
+
+            let policyManagerConfigData = "0x";
+            if (policies.depositorWhitelist.enabled) {
+                const addresses = policies.depositorWhitelist.list
+                    .split('\n')
+                    .map(addr => addr.trim())
+                    .filter(addr => addr);
+
+                if (addresses.length === 0) {
+                    alert('白名單地址列表不能為空');
+                    setIsSubmitting(false);
+                    return;
+                }
+
+                for (const addr of addresses) {
+                    if (!ethers.isAddress(addr)) {
+                        alert(`無效的白名單地址: ${addr}`);
+                        setIsSubmitting(false);
+                        return;
+                    }
+                }
+
+                // IAddressListRegistry.UpdateType.None is 0
+                const newListsData = [
+                    defaultAbiCoder.encode(['uint8', 'address[]'], [0, addresses])
+                ];
+
+                const policySettingsData = defaultAbiCoder.encode(
+                    ['uint256[]', 'bytes[]'],
+                    [[], newListsData]
+                );
+
+                policyManagerConfigData = defaultAbiCoder.encode(
+                    ['address[]', 'bytes[]'],
+                    [[ALLOWED_DEPOSIT_RECIPIENTS_POLICY_ADDRESS], [policySettingsData]]
+                );
+            }
+            // --- END ABI 編碼 ---
+
 
             if (!assetAddress) {
                 throw new Error(`不支援的計價資產: ${denominationAsset}`);
@@ -156,15 +219,21 @@ const CreateFundPage: React.FC = () => {
                 _fundOwner: fundOwner,
                 _fundName: fundName,
                 _fundSymbol: fundSymbol,
-                _denominationAsset: denominationAsset,
+                _denominationAsset: assetAddress,
                 _sharesActionTimelock: sharesActionTimelock,
                 _feeManagerConfigData: feeManagerConfigData,
                 _policyManagerConfigData: policyManagerConfigData
             });
 
-            const tx = await factoryContract.createNewFund(fundOwner, fundName, fundSymbol
-                , assetAddress
-                , sharesActionTimelock, feeManagerConfigData, policyManagerConfigData);
+            const tx = await factoryContract.createNewFund(
+                fundOwner,
+                fundName,
+                fundSymbol,
+                assetAddress,
+                sharesActionTimelock,
+                feeManagerConfigData,
+                policyManagerConfigData
+            );
             setTxHash(tx.hash);
 
             await tx.wait(); // Wait for transaction to be mined
@@ -243,7 +312,14 @@ const CreateFundPage: React.FC = () => {
                                         <div><label htmlFor="performanceFeeRate" className="block text-sm font-medium text-gray-700">費率 (%)</label><input type="number" id="performanceFeeRate" value={fees.performance.rate} onChange={e => setFees(f => ({ ...f, performance: { ...f.performance, rate: +e.target.value } }))} className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
                                     </FeeSetting>
                                     <FeeSetting title="申購費 (Entrance Fee)" description="在每次申購時收取固定比例的費用。" isEnabled={fees.entrance.enabled} onToggle={v => setFees(f => ({ ...f, entrance: { ...f.entrance, enabled: v } }))}>
-                                        <div><label htmlFor="entranceFeeRate" className="block text-sm font-medium text-gray-700">費率 (%)</label><input type="number" id="entranceFeeRate" value={fees.entrance.rate} onChange={e => setFees(f => ({ ...f, entrance: { ...f.entrance, rate: +e.target.value } }))} className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
+                                        <div>
+                                            <label htmlFor="entranceFeeRate" className="block text-sm font-medium text-gray-700">費率 (%)</label>
+                                            <input type="number" id="entranceFeeRate" value={fees.entrance.rate} onChange={e => setFees(f => ({ ...f, entrance: { ...f.entrance, rate: +e.target.value } }))} className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="entranceFeeRecipient" className="block text-sm font-medium text-gray-700">收款地址</label>
+                                            <input type="text" id="entranceFeeRecipient" value={fees.entrance.recipient} onChange={e => setFees(f => ({ ...f, entrance: { ...f.entrance, recipient: e.target.value } }))} placeholder="例如：0x..." className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" />
+                                        </div>
                                     </FeeSetting>
                                     <FeeSetting title="贖回費 (Exit Fee)" description="在每次贖回時收取固定比例的費用。" isEnabled={fees.exit.enabled} onToggle={v => setFees(f => ({ ...f, exit: { ...f.exit, enabled: v } }))}>
                                         <div><label htmlFor="exitFeeRate" className="block text-sm font-medium text-gray-700">費率 (%)</label><input type="number" id="exitFeeRate" value={fees.exit.rate} onChange={e => setFees(f => ({ ...f, exit: { ...f.exit, rate: +e.target.value } }))} className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
@@ -256,7 +332,10 @@ const CreateFundPage: React.FC = () => {
                                     <h2 className="text-3xl font-bold text-gray-900 mb-2">申購策略</h2>
                                     <p className="text-gray-500 mb-8">設定誰可以投資您的基金，以及投資的額度限制。</p>
                                     <FeeSetting title="投資人白名單" description="開啟後，只有白名單內的錢包地址才能申購基金份額。" isEnabled={policies.depositorWhitelist.enabled} onToggle={v => setPolicies(p => ({ ...p, depositorWhitelist: { ...p.depositorWhitelist, enabled: v } }))}>
-                                        <div><label htmlFor="depositorWhitelist" className="block text-sm font-medium text-gray-700">錢包地址列表</label><textarea id="depositorWhitelist" rows={3} placeholder="每行一個地址，例如：0x..." className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea></div>
+                                        <div>
+                                            <label htmlFor="depositorWhitelist" className="block text-sm font-medium text-gray-700">錢包地址列表</label>
+                                            <textarea id="depositorWhitelist" value={policies.depositorWhitelist.list} onChange={e => setPolicies(p => ({ ...p, depositorWhitelist: { ...p.depositorWhitelist, list: e.target.value } }))} rows={3} placeholder="每行一個地址，例如：0x..." className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea>
+                                        </div>
                                     </FeeSetting>
                                     <FeeSetting title="申購限額" description="設定單次申購的最低和最高金額限制。" isEnabled={policies.depositLimits.enabled} onToggle={v => setPolicies(p => ({ ...p, depositLimits: { ...p.depositLimits, enabled: v } }))}>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -284,7 +363,17 @@ const CreateFundPage: React.FC = () => {
                                     <div className="p-4 border rounded-lg bg-gray-50">
                                         <h3 className="text-lg font-semibold">份額鎖倉期</h3>
                                         <p className="text-sm text-gray-600 mt-1">設定投資人申購後，其份額需要鎖定一段時間後才能贖回。 <span className="font-semibold text-amber-600">此為半永久性設定。</span></p>
-                                        <div className="mt-4"><label htmlFor="lockupPeriod" className="block text-sm font-medium text-gray-700">鎖倉時間 (小時)</label><input type="number" id="lockupPeriod" defaultValue="0" placeholder="例如：72" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
+                                        <div className="mt-4">
+                                            <label htmlFor="lockupPeriod" className="block text-sm font-medium text-gray-700">鎖倉時間 (小時)</label>
+                                            <input
+                                                type="number"
+                                                id="lockupPeriod"
+                                                value={sharesActionTimelockInHours}
+                                                onChange={e => setSharesActionTimelockInHours(Number(e.target.value))}
+                                                placeholder="例如：24"
+                                                className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             )}
