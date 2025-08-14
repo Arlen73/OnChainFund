@@ -1,11 +1,12 @@
-
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useWallet } from '../contexts/WalletContext';
 
 const Header: React.FC = () => {
-    const { isConnected, address, role, connect } = useWallet();
+    const { isConnected, address, role, connect, disconnect } = useWallet();
     const navigate = useNavigate();
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     const navLinkClass = ({ isActive }: { isActive: boolean }) =>
         isActive
@@ -13,7 +14,6 @@ const Header: React.FC = () => {
             : "text-gray-600 hover:text-blue-500";
 
     const handleConnect = async () => {
-        // Simple logic for demo: if no role, prompt or default to investor
         if (!role) {
             try {
                 await connect('investor');
@@ -21,15 +21,43 @@ const Header: React.FC = () => {
                 console.error("Connection failed on header");
             }
         }
-    }
+    };
+
+    const handleSwitchWallet = async () => {
+        setIsDropdownOpen(false);
+        if (role) {
+            try {
+                await connect(role);
+            } catch (e) {
+                console.error("Switching wallet failed");
+            }
+        }
+    };
+
+    const handleDisconnect = () => {
+        setIsDropdownOpen(false);
+        disconnect();
+    };
+    
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
 
     const getDashboardPath = () => {
         return role === 'manager' ? '/dashboard/manager' : '/dashboard/investor';
-    }
+    };
 
     const getCreateFundPath = () => {
         return '/create-fund';
-    }
+    };
 
     return (
         <header className="bg-white shadow-sm sticky top-0 z-50">
@@ -55,14 +83,32 @@ const Header: React.FC = () => {
                             連接錢包
                         </button>
                     ) : (
-                        <div className="flex items-center space-x-4">
-                            <div className="text-right">
-                                <p className="text-sm font-semibold text-gray-700">{address}</p>
-                                <p className="text-xs text-gray-500">{role === 'manager' ? '基金經理' : 'Ethereum'}</p>
-                            </div>
-                            <div className={`w-10 h-10 bg-gradient-to-tr from-blue-400 to-emerald-400 rounded-full flex items-center justify-center text-white font-bold`}>
-                                {role === 'manager' && 'M'}
-                            </div>
+                        <div className="relative">
+                            <button onClick={() => setIsDropdownOpen(prev => !prev)} className="flex items-center space-x-4 cursor-pointer">
+                                <div className="text-right">
+                                    <p className="text-sm font-semibold text-gray-700">{address ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : ''}</p>
+                                    <p className="text-xs text-gray-500">{role === 'manager' ? '基金經理' : '投資人'}</p>
+                                </div>
+                                <div className={`w-10 h-10 bg-gradient-to-tr from-blue-400 to-emerald-400 rounded-full flex items-center justify-center text-white font-bold`}>
+                                    {role === 'manager' ? 'M' : 'I'}
+                                </div>
+                            </button>
+                            {isDropdownOpen && (
+                                <div ref={dropdownRef} className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border">
+                                    <button
+                                        onClick={handleSwitchWallet}
+                                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        切換錢包
+                                    </button>
+                                    <button
+                                        onClick={handleDisconnect}
+                                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                    >
+                                        中斷連結
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

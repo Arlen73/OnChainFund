@@ -1,17 +1,13 @@
-
 import React, { useState, useEffect } from 'react';
 import { useWallet } from '../contexts/WalletContext';
 import { ethers } from 'ethers';
 
 // --- Constants and ABIs ---
-const VAULT_PROXY_ADDRESS = '0xABBf9b6439BB5335C48d80a00d2cDCbA23A942e6';
+const COMPTROLLER_PROXY_ADDRESS = '0x369d962418A1B9D3997Df74c16227D39b43eCC99';
 const DEPOSIT_TOKEN_ADDRESS = import.meta.env.VITE_ASVT_ADDRESS; // ASVT Token
 
-const VAULT_PROXY_ABI = [
-    'function getAccessor() view returns (address)'
-];
-
 const COMPTROLLER_ABI = [
+    'function getVaultProxy() view returns (address)',
     'function calcGav() view returns (uint256)',
     'function calcGrossShareValue() view returns (uint256)',
     'function buyShares(uint256 _investmentAmount, uint256 _minSharesQuantity)',
@@ -55,7 +51,7 @@ const FundDepositPage: React.FC = () => {
     // Contract and data states
     const [comptrollerContract, setComptrollerContract] = useState<ethers.Contract | null>(null);
     const [depositTokenContract, setDepositTokenContract] = useState<ethers.Contract | null>(null);
-    const [comptrollerProxyAddress, setComptrollerProxyAddress] = useState<string | null>(null);
+    const [vaultProxyAddress, setVaultProxyAddress] = useState<string | null>(null);
     const [fundData, setFundData] = useState({ nav: '0.00', aum: '0.00' });
     const [userData, setUserData] = useState({ tokenBalance: '0.00', allowance: '0' });
 
@@ -89,11 +85,12 @@ const FundDepositPage: React.FC = () => {
             if (!provider) return;
             setError(null);
             try {
-                const vaultProxy = new ethers.Contract(VAULT_PROXY_ADDRESS, VAULT_PROXY_ABI, provider);
-                const comptrollerAddress = await vaultProxy.getAccessor();
-                setComptrollerProxyAddress(comptrollerAddress);
-                const comptroller = new ethers.Contract(comptrollerAddress, COMPTROLLER_ABI, signer || provider);
+                const comptroller = new ethers.Contract(COMPTROLLER_PROXY_ADDRESS, COMPTROLLER_ABI, signer || provider);
                 setComptrollerContract(comptroller);
+
+                const vaultAddress = await comptroller.getVaultProxy();
+                setVaultProxyAddress(vaultAddress);
+                
                 const depositToken = new ethers.Contract(DEPOSIT_TOKEN_ADDRESS, ERC20_ABI, signer || provider);
                 setDepositTokenContract(depositToken);
             } catch (e) {
@@ -107,20 +104,20 @@ const FundDepositPage: React.FC = () => {
         } else {
             setComptrollerContract(null);
             setDepositTokenContract(null);
-            setComptrollerProxyAddress(null);
+            setVaultProxyAddress(null);
             setError(null);
         }
     }, [isConnected, provider, signer]);
 
     useEffect(() => {
         const fetchData = async () => {
-            if (!comptrollerContract || !depositTokenContract || !address || !comptrollerProxyAddress) return;
+            if (!comptrollerContract || !depositTokenContract || !address || !vaultProxyAddress) return;
             try {
                 const [navResult, gavResult, balanceResult, allowanceResult] = await Promise.all([
                     comptrollerContract.calcGrossShareValue(),
                     comptrollerContract.calcGav(),
                     depositTokenContract.balanceOf(address),
-                    depositTokenContract.allowance(address, comptrollerProxyAddress),
+                    depositTokenContract.allowance(address, vaultProxyAddress),
                 ]);
 
                 const nav = parseFloat(ethers.formatUnits(navResult, 18)).toFixed(4);
@@ -130,9 +127,13 @@ const FundDepositPage: React.FC = () => {
                 setFundData({ nav, aum });
                 setUserData({ tokenBalance, allowance: allowanceResult.toString() });
                 
-                const inputAmount = ethers.parseUnits(amount || "0", 18);
-                if (allowanceResult >= inputAmount) {
-                    setIsApproved(true);
+                if (amount) {
+                    const inputAmount = ethers.parseUnits(amount, 18);
+                    if (allowanceResult >= inputAmount) {
+                        setIsApproved(true);
+                    } else {
+                        setIsApproved(false);
+                    }
                 } else {
                     setIsApproved(false);
                 }
@@ -144,18 +145,15 @@ const FundDepositPage: React.FC = () => {
         };
 
         fetchData();
-        // Re-fetch data periodically or on specific events
-        const interval = setInterval(fetchData, 30000); // every 30 seconds
+        const interval = setInterval(fetchData, 30000);
         return () => clearInterval(interval);
-    }, [comptrollerContract, depositTokenContract, address, comptrollerProxyAddress, amount]);
+    }, [comptrollerContract, depositTokenContract, address, vaultProxyAddress, amount]);
 
     useEffect(() => {
         const numAmount = parseFloat(amount) || 0;
         const nav = parseFloat(fundData.nav) || 0;
         if (numAmount > 0 && nav > 0) {
-            // NOTE: Using hardcoded 1% fee from mockup. A real implementation
-            // would fetch this from the fee manager contract.
-            const fee = numAmount * 0.01;
+            const fee = numAmount * 0.01; // 1% fee
             const netAmount = numAmount - fee;
             const shares = netAmount / nav;
             setCalculations({
@@ -170,14 +168,14 @@ const FundDepositPage: React.FC = () => {
 
 
     const handleApprove = async () => {
-        if (!depositTokenContract || !comptrollerProxyAddress || !amount) {
+        if (!depositTokenContract || !COMPTROLLER_PROXY_ADDRESS || !amount) {
             setError("無法執行授權：要件不全。");
             return;
         }
         startAction(setIsApproving);
         try {
             const parsedAmount = ethers.parseUnits(amount, 18);
-            const tx = await depositTokenContract.approve(comptrollerProxyAddress, parsedAmount);
+            const tx = await depositTokenContract.approve(COMPTROLLER_PROXY_ADDRESS, parsedAmount);
             await tx.wait();
             setIsApproved(true);
             setSuccessMessage("ASVT 授權成功！");
@@ -198,8 +196,13 @@ const FundDepositPage: React.FC = () => {
         
         try {
             const parsedAmount = ethers.parseUnits(amount, 18);
-            const minSharesQuantity = 1; // Note: Not safe for production
             
+            // Slippage protection: 0.5%
+            //const expectedShares = parseFloat(calculations.shares);
+            //const minShares = expectedShares * 0.995;
+            //const minSharesQuantity = ethers.parseUnits(minShares.toFixed(18), 18);
+            const minSharesQuantity = 1;
+
             const tx = await comptrollerContract.buyShares(parsedAmount, minSharesQuantity);
             await tx.wait();
 
