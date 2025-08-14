@@ -14,11 +14,12 @@ const DENOMINATION_ASSET_ADDRESSES: { [key: string]: string } = {
     'WETH': import.meta.env.VITE_WETH_ADDRESS,
     'ASVT': import.meta.env.VITE_ASVT_ADDRESS,
 };
+const ENTRANCE_RATE_DIRECT_FEE_ADDRESS = import.meta.env.VITE_ENTRANCE_RATE_DIRECT_FEE_ADDRESS;
+const ALLOWED_DEPOSIT_RECIPIENTS_POLICY_ADDRESS = import.meta.env.VITE_ALLOWED_DEPOSIT_RECIPIENTS_POLICY_ADDRESS;
+
 const FUND_FACTORY_ABI = [
-    { "inputs": [], "name": "deployedFunds", "outputs": [{ "internalType": "address[]", "name": "", "type": "address[]" }], "stateMutability": "view", "type": "function" },
-    { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "fundAddress", "type": "address" }, { "indexed": true, "internalType": "address", "name": "manager", "type": "address" }, { "internalType": "string", "name": "fundName", "type": "string" }, { "indexed": false, "internalType": "address", "name": "denominationAsset", "type": "address" }], "name": "FundCreated", "type": "event" },
-    { "inputs": [{ "internalType": "string", "name": "_name", "type": "string" }, { "internalType": "string", "name": "_symbol", "type": "string" }, { "internalType": "address", "name": "_denominationAsset", "type": "address" }], "name": "createFund", "outputs": [{ "internalType": "address", "name": "newFundAddress", "type": "address" }], "stateMutability": "nonpayable", "type": "function" },
-    { "inputs": [], "name": "getDeployedFunds", "outputs": [{ "internalType": "address[]", "name": "", "type": "address[]" }], "stateMutability": "view", "type": "function" }
+    'function balanceOf(address account) view returns (uint256)',
+    'function createNewFund(address _fundOwner, string _fundName, string _fundSymbol, address _denominationAsset, uint256 _sharesActionTimelock, bytes _feeManagerConfigData, bytes _policyManagerConfigData) returns (address comptrollerProxy_, address vaultProxy_)'
 ];
 // ----------------------------------------------
 
@@ -85,7 +86,7 @@ const CreateFundPage: React.FC = () => {
     const [fees, setFees] = useState({
         management: { enabled: false, rate: 2 },
         performance: { enabled: false, rate: 20 },
-        entrance: { enabled: false, rate: 1 },
+        entrance: { enabled: false, rate: 1, recipient: '' },
         exit: { enabled: false, rate: 1 },
     });
     const [policies, setPolicies] = useState({
@@ -93,6 +94,8 @@ const CreateFundPage: React.FC = () => {
         depositLimits: { enabled: false, min: 0, max: 10000 },
         shareTransferWhitelist: { enabled: false, list: '' },
     });
+    const [sharesActionTimelockInHours, setSharesActionTimelockInHours] = useState(24);
+
 
     // Transaction State
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -128,14 +131,109 @@ const CreateFundPage: React.FC = () => {
         setIsSubmitting(true);
 
         try {
+            // 2. 創建一個基於瀏覽器錢包的 Provider
+            const provider = new ethers.BrowserProvider(window.ethereum);
+
+            // 在這裡，用戶需要在 MetaMask 中手動將網路切換到 "Sepolia"
+            // 你也可以透過程式碼請求切換網路，但好的用戶體驗是先檢查當前網路
+            const network = await provider.getNetwork();
+            if (network.name !== "sepolia") {
+                alert("請將 MetaMask 網路切換到 Sepolia 測試網路！");
+                return;
+            }
+            console.log("當前網路:", network.name);
+            console.log("signer:", signer);
+
+
             const factoryContract = new ethers.Contract(FUND_FACTORY_ADDRESS, FUND_FACTORY_ABI, signer);
             const assetAddress = DENOMINATION_ASSET_ADDRESSES[denominationAsset];
+            const fundOwner = await signer.getAddress();
+            const sharesActionTimelock = sharesActionTimelockInHours * 60 * 60; // Convert hours to seconds
+
+            // --- ABI 編碼 ---
+            const defaultAbiCoder = ethers.AbiCoder.defaultAbiCoder();
+            let feeManagerConfigData = "0x";
+            if (fees.entrance.enabled) {
+                const recipient = fees.entrance.recipient;
+                if (!ethers.isAddress(recipient)) {
+                    alert('無效的收款地址');
+                    setIsSubmitting(false);
+                    return;
+                }
+                // 1% in the contract is 100, so we multiply by 100
+                const rate = fees.entrance.rate * 100;
+                const entranceFeeSettings = defaultAbiCoder.encode(
+                    ['uint256', 'address'],
+                    [rate, recipient]
+                );
+                feeManagerConfigData = defaultAbiCoder.encode(
+                    ['address[]', 'bytes[]'],
+                    [[ENTRANCE_RATE_DIRECT_FEE_ADDRESS], [entranceFeeSettings]]
+                );
+            }
+
+            let policyManagerConfigData = "0x";
+            if (policies.depositorWhitelist.enabled) {
+                const addresses = policies.depositorWhitelist.list
+                    .split('\n')
+                    .map(addr => addr.trim())
+                    .filter(addr => addr);
+
+                if (addresses.length === 0) {
+                    alert('白名單地址列表不能為空');
+                    setIsSubmitting(false);
+                    return;
+                }
+
+                for (const addr of addresses) {
+                    if (!ethers.isAddress(addr)) {
+                        alert(`無效的白名單地址: ${addr}`);
+                        setIsSubmitting(false);
+                        return;
+                    }
+                }
+
+                // IAddressListRegistry.UpdateType.None is 0
+                const newListsData = [
+                    defaultAbiCoder.encode(['uint8', 'address[]'], [0, addresses])
+                ];
+
+                const policySettingsData = defaultAbiCoder.encode(
+                    ['uint256[]', 'bytes[]'],
+                    [[], newListsData]
+                );
+
+                policyManagerConfigData = defaultAbiCoder.encode(
+                    ['address[]', 'bytes[]'],
+                    [[ALLOWED_DEPOSIT_RECIPIENTS_POLICY_ADDRESS], [policySettingsData]]
+                );
+            }
+            // --- END ABI 編碼 ---
+
 
             if (!assetAddress) {
                 throw new Error(`不支援的計價資產: ${denominationAsset}`);
             }
 
-            const tx = await factoryContract.createFund(fundName, fundSymbol, assetAddress);
+            console.log("傳入參數:", {
+                _fundOwner: fundOwner,
+                _fundName: fundName,
+                _fundSymbol: fundSymbol,
+                _denominationAsset: assetAddress,
+                _sharesActionTimelock: sharesActionTimelock,
+                _feeManagerConfigData: feeManagerConfigData,
+                _policyManagerConfigData: policyManagerConfigData
+            });
+
+            const tx = await factoryContract.createNewFund(
+                fundOwner,
+                fundName,
+                fundSymbol,
+                assetAddress,
+                sharesActionTimelock,
+                feeManagerConfigData,
+                policyManagerConfigData
+            );
             setTxHash(tx.hash);
 
             await tx.wait(); // Wait for transaction to be mined
@@ -214,7 +312,14 @@ const CreateFundPage: React.FC = () => {
                                         <div><label htmlFor="performanceFeeRate" className="block text-sm font-medium text-gray-700">費率 (%)</label><input type="number" id="performanceFeeRate" value={fees.performance.rate} onChange={e => setFees(f => ({ ...f, performance: { ...f.performance, rate: +e.target.value } }))} className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
                                     </FeeSetting>
                                     <FeeSetting title="申購費 (Entrance Fee)" description="在每次申購時收取固定比例的費用。" isEnabled={fees.entrance.enabled} onToggle={v => setFees(f => ({ ...f, entrance: { ...f.entrance, enabled: v } }))}>
-                                        <div><label htmlFor="entranceFeeRate" className="block text-sm font-medium text-gray-700">費率 (%)</label><input type="number" id="entranceFeeRate" value={fees.entrance.rate} onChange={e => setFees(f => ({ ...f, entrance: { ...f.entrance, rate: +e.target.value } }))} className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
+                                        <div>
+                                            <label htmlFor="entranceFeeRate" className="block text-sm font-medium text-gray-700">費率 (%)</label>
+                                            <input type="number" id="entranceFeeRate" value={fees.entrance.rate} onChange={e => setFees(f => ({ ...f, entrance: { ...f.entrance, rate: +e.target.value } }))} className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="entranceFeeRecipient" className="block text-sm font-medium text-gray-700">收款地址</label>
+                                            <input type="text" id="entranceFeeRecipient" value={fees.entrance.recipient} onChange={e => setFees(f => ({ ...f, entrance: { ...f.entrance, recipient: e.target.value } }))} placeholder="例如：0x..." className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" />
+                                        </div>
                                     </FeeSetting>
                                     <FeeSetting title="贖回費 (Exit Fee)" description="在每次贖回時收取固定比例的費用。" isEnabled={fees.exit.enabled} onToggle={v => setFees(f => ({ ...f, exit: { ...f.exit, enabled: v } }))}>
                                         <div><label htmlFor="exitFeeRate" className="block text-sm font-medium text-gray-700">費率 (%)</label><input type="number" id="exitFeeRate" value={fees.exit.rate} onChange={e => setFees(f => ({ ...f, exit: { ...f.exit, rate: +e.target.value } }))} className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
@@ -227,7 +332,10 @@ const CreateFundPage: React.FC = () => {
                                     <h2 className="text-3xl font-bold text-gray-900 mb-2">申購策略</h2>
                                     <p className="text-gray-500 mb-8">設定誰可以投資您的基金，以及投資的額度限制。</p>
                                     <FeeSetting title="投資人白名單" description="開啟後，只有白名單內的錢包地址才能申購基金份額。" isEnabled={policies.depositorWhitelist.enabled} onToggle={v => setPolicies(p => ({ ...p, depositorWhitelist: { ...p.depositorWhitelist, enabled: v } }))}>
-                                        <div><label htmlFor="depositorWhitelist" className="block text-sm font-medium text-gray-700">錢包地址列表</label><textarea id="depositorWhitelist" rows={3} placeholder="每行一個地址，例如：0x..." className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea></div>
+                                        <div>
+                                            <label htmlFor="depositorWhitelist" className="block text-sm font-medium text-gray-700">錢包地址列表</label>
+                                            <textarea id="depositorWhitelist" value={policies.depositorWhitelist.list} onChange={e => setPolicies(p => ({ ...p, depositorWhitelist: { ...p.depositorWhitelist, list: e.target.value } }))} rows={3} placeholder="每行一個地址，例如：0x..." className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"></textarea>
+                                        </div>
                                     </FeeSetting>
                                     <FeeSetting title="申購限額" description="設定單次申購的最低和最高金額限制。" isEnabled={policies.depositLimits.enabled} onToggle={v => setPolicies(p => ({ ...p, depositLimits: { ...p.depositLimits, enabled: v } }))}>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -255,7 +363,17 @@ const CreateFundPage: React.FC = () => {
                                     <div className="p-4 border rounded-lg bg-gray-50">
                                         <h3 className="text-lg font-semibold">份額鎖倉期</h3>
                                         <p className="text-sm text-gray-600 mt-1">設定投資人申購後，其份額需要鎖定一段時間後才能贖回。 <span className="font-semibold text-amber-600">此為半永久性設定。</span></p>
-                                        <div className="mt-4"><label htmlFor="lockupPeriod" className="block text-sm font-medium text-gray-700">鎖倉時間 (小時)</label><input type="number" id="lockupPeriod" defaultValue="0" placeholder="例如：72" className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg" /></div>
+                                        <div className="mt-4">
+                                            <label htmlFor="lockupPeriod" className="block text-sm font-medium text-gray-700">鎖倉時間 (小時)</label>
+                                            <input
+                                                type="number"
+                                                id="lockupPeriod"
+                                                value={sharesActionTimelockInHours}
+                                                onChange={e => setSharesActionTimelockInHours(Number(e.target.value))}
+                                                placeholder="例如：24"
+                                                className="w-full mt-1 px-4 py-2 border border-gray-300 rounded-lg"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             )}
